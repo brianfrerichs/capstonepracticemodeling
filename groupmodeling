@@ -194,23 +194,90 @@ c50_pred_prob <- predict(c50_model, newdata = model_val, type = "prob")[, 2]
 
 ### C50 Decision Tree commentary 
 
+
 ##### GRADIENT BOOST #####
 
+library(gbm)
+
+# Gradient Boosting Machine
+
+caret_xgb <- train(
+  target ~ .,
+  method = "gbm",
+  trControl = trainControl(
+    method = "cv",
+    number = 5,
+    classProbs = TRUE,
+    summaryFunction = twoClassSummary,
+    sampling = "down"
+  ),
+  data = model_tr,
+  metric = "ROC",
+  tuneLength = 5
+)
+
+summary(caret_xgb)
+view(caret_xgb)
+
+
+# ROC for training set
+train_probs <- predict(caret_xgb, newdata = model_tr, type = "prob")[, "default"]
+roc_train <- roc(response = model_tr$target, predictor = train_probs)
+cat("Train AUC:", auc(roc_train), "\n")
+
+# ROC for test set
+test_probs <- predict(caret_xgb, newdata = model_val, type = "prob")[, "default"]
+roc_test <- roc(response = model_val$target, predictor = test_probs)
+cat("Test AUC:", auc(roc_test), "\n")
+
+# Optional: Plot both ROC curves
+plot(roc_train, col = "blue", main = "ROC Curves")
+lines(roc_test, col = "red")
+legend("bottomright", legend = c("Train", "Test"), col = c("blue", "red"), lwd = 2)
 
 
 
+# Extract variable importance
+importance <- varImp(caret_xgb, scale = TRUE)
 
+# Convert to data frame for ggplot
+importance_df <- data.frame(
+  Feature = rownames(importance$importance),
+  Importance = importance$importance$Overall
+)
 
+# Plot of the most important predictors
+ggplot(importance_df, aes(x = reorder(Feature, Importance), y = Importance)) +
+  geom_col(fill = "steelblue") +
+  coord_flip() +
+  labs(title = "Feature Importance (GBM Model)",
+       x = "Features",
+       y = "Importance Score") +
+  theme_minimal()
 
+### Gradient Boost Commentary ###
 
-
-
-
+This model achieved an AUC of roughly .75 on both the training and the validation set. Down sampling and K fold validation was performed.
+The feature importance plot indicated that the 3 external risk score variables were highly important, as were the annuity, income, and credit variables. Age, and employment duration also appear to matter.
 
 
 
 
 ### SUMMARIZED RESULTS AND COMPARISONS, NEXT STEPS###
+
+
+For next steps, we need to understand better how our models can be applied into actionable business insights. We know that an AUC in the 70's has significant predictive power.
+However, AUC does not exist in a vacuum. We need to choose a threshold along our chosen AUC curve that gives the business a framework for predicting default. To choose this threshold, we need a better understanding
+of the company's risk profile, and how much they typically lose to default. For example, if the agency wants to be more risk averse and minimize their default rate, they would choose a lower cutoff along the AUC curve,
+even if it means a higher chance of false positive predictions. 
+
+
+
+
+
+
+
+
 
 
 
