@@ -9,6 +9,27 @@ output: html_document
 knitr::opts_chunk$set(echo = TRUE)
 ```
 
+
+****Business Problem
+The Business problem is that Home Credit wants to be able to accurately predict potential new client’s abilities to repay loans. Home Credit hopes to provide a positive lending experience to the unbaked by sheltering them from predatory lending arrangements. 
+
+****Benefit of a Solution
+If they are able to minimize the amount of loans given out that the client is unable to repay, then Home Credit will minimize their own financial risk and the unbanked population will be in a better financial state.
+
+****Success Metrics
+The success metric will be the area under the ROC curve, which is a measurement of how accurate our classifier is. An AUC of 1 indicates a perfect classifier, while an AUC of .5 indicates that our model is no better than a random classifier. So in this case an AUC closer to 1 indicates that our model successfully predicts who will and will not repay loans.
+
+****Analytics Approach
+This is a supervised learning problem, and the target variable is whether the loan was repaid. This is a classification problem. 
+
+
+
+
+
+
+
+
+
 ```{r}
 
 
@@ -35,7 +56,8 @@ application_train_slim <- application_train %>%
 APP_TRAIN_BIN_EMPLOYMENT <- application_train_slim %>%
   mutate(
     EMPLOYMENT_DURATION = case_when(
-      DAYS_EMPLOYED == 365243 ~ "Not Working",
+      DAYS_EMPLOYED == 365243 & NAME_INCOME_TYPE == "Pensioner" ~ "Pensioner",
+      DAYS_EMPLOYED == 365243 & NAME_INCOME_TYPE == "Unemployed" ~ "Unemployed",
       DAYS_EMPLOYED > -365 ~ "Short Term",
       DAYS_EMPLOYED <= -365 & DAYS_EMPLOYED >= -1825 ~ "Medium Term",
       TRUE ~ "Long Term" # Default case if no other conditions are met
@@ -142,7 +164,7 @@ model_tr$target <- factor(ifelse(model_tr$target == 0, "no_default", "default"),
 model_val$target <- factor(ifelse(model_val$target == 0, "no_default", "default"),
                           levels = c("no_default", "default"))
 
-
+# Fit our logistic regression model
 caret_glm <- train(
   target ~ amt_income_total +
            amt_annuity +
@@ -153,13 +175,13 @@ caret_glm <- train(
            days_birth +
            employment_duration,
   method = "glm",
-  family = "binomial",
+  family = "binomial",   # binary target
   trControl = trainControl(
     method = "cv",
     number = 5,
     classProbs = TRUE,
-    summaryFunction = twoClassSummary,
-    sampling = "down"
+    summaryFunction = twoClassSummary,    
+    sampling = "down"   # down sample the majority class
   ),
   data = model_tr,
   metric = "ROC"
@@ -183,25 +205,13 @@ plot(roc_train, col = "blue", main = "ROC Curves")
 lines(roc_test, col = "red")
 legend("bottomright", legend = c("Train", "Test"), col = c("blue", "red"), lwd = 2)
 
-# ROC for training set
-train_probs <- predict(caret_glm, newdata = model_tr, type = "prob")[, "default"]
-roc_train <- roc(response = model_tr$target, predictor = train_probs)
-cat("Train AUC:", auc(roc_train), "\n")
-
-# ROC for test set
-test_probs <- predict(caret_glm, newdata = model_val, type = "prob")[, "default"]
-roc_test <- roc(response = model_val$target, predictor = test_probs)
-cat("Test AUC:", auc(roc_test), "\n")
-
-# Optional: Plot both ROC curves
-plot(roc_train, col = "blue", main = "ROC Curves")
-lines(roc_test, col = "red")
-legend("bottomright", legend = c("Train", "Test"), col = c("blue", "red"), lwd = 2)
-
 ```
 
 
 ```{r}
+
+
+# Random Forest
 
 caret_rf <- train(
   target ~ amt_income_total +
@@ -212,7 +222,7 @@ caret_rf <- train(
            ext_source_3 +
            days_birth +
            employment_duration,,
-  method = "ranger",
+  method = "ranger",   # Fast Random Fores
   trControl = trainControl(
     method = "cv",
     number = 5,
@@ -225,6 +235,7 @@ caret_rf <- train(
 )
 
 summary(caret_rf)
+view(caret_rf)
 
 
 # ROC for training set
@@ -260,5 +271,63 @@ legend("bottomright", legend = c("Train", "Test"), col = c("blue", "red"), lwd =
 
 
 ```
+```{r}
+library(gbm)
+
+# Gradient Boosting Machine
+
+caret_xgb <- train(
+  target ~ .,
+  method = "gbm",
+  trControl = trainControl(
+    method = "cv",
+    number = 5,
+    classProbs = TRUE,
+    summaryFunction = twoClassSummary,
+    sampling = "down"
+  ),
+  data = model_tr,
+  metric = "ROC",
+  tuneLength = 5
+)
+
+summary(caret_xgb)
+view(caret_xgb)
 
 
+# ROC for training set
+train_probs <- predict(caret_xgb, newdata = model_tr, type = "prob")[, "default"]
+roc_train <- roc(response = model_tr$target, predictor = train_probs)
+cat("Train AUC:", auc(roc_train), "\n")
+
+# ROC for test set
+test_probs <- predict(caret_xgb, newdata = model_val, type = "prob")[, "default"]
+roc_test <- roc(response = model_val$target, predictor = test_probs)
+cat("Test AUC:", auc(roc_test), "\n")
+
+# Optional: Plot both ROC curves
+plot(roc_train, col = "blue", main = "ROC Curves")
+lines(roc_test, col = "red")
+legend("bottomright", legend = c("Train", "Test"), col = c("blue", "red"), lwd = 2)
+
+
+
+# Extract variable importance
+importance <- varImp(caret_xgb, scale = TRUE)
+
+# Convert to data frame for ggplot
+importance_df <- data.frame(
+  Feature = rownames(importance$importance),
+  Importance = importance$importance$Overall
+)
+
+# Plot of the most important predictors
+ggplot(importance_df, aes(x = reorder(Feature, Importance), y = Importance)) +
+  geom_col(fill = "steelblue") +
+  coord_flip() +
+  labs(title = "Feature Importance (GBM Model)",
+       x = "Features",
+       y = "Importance Score") +
+  theme_minimal()
+
+```
