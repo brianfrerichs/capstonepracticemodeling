@@ -197,20 +197,30 @@ c50_pred_prob <- predict(c50_model, newdata = model_val, type = "prob")[, 2]
 ##### GRADIENT BOOST #####
 
 
+### Gradient Boost Commentary ###
 
-
-
-
-
-
-
-
-
+This model achieved an AUC of roughly .75 on both the training and the validation set. Down sampling and K fold validation was performed.
+The feature importance plot indicated that the 3 external risk score variables were highly important, as were the annuity, income, and credit variables. Age, and employment duration also appear to matter.
 
 
 
 
 ### SUMMARIZED RESULTS AND COMPARISONS, NEXT STEPS###
+
+
+For next steps, we need to understand better how our models can be applied into actionable business insights. We know that an AUC in the 70's has significant predictive power.
+However, AUC does not exist in a vacuum. We need to choose a threshold along our chosen AUC curve that gives the business a framework for predicting default. To choose this threshold, we need a better understanding
+of the company's risk profile, and how much they typically lose to default. For example, if the agency wants to be more risk averse and minimize their default rate, they would choose a lower cutoff along the AUC curve,
+even if it means a higher chance of false positive predictions. 
+
+
+
+
+
+
+
+
+
 
 
 
